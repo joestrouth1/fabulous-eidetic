@@ -11,7 +11,11 @@ For now, it's reproduces an issue where:
 - And the height of the VStack shrinks
 - And the dot of the 'i' in the top TextBlock is visible in multiple locations
 
-![]("/idot-issue.mp4")
+
+
+https://github.com/user-attachments/assets/8be3d746-15b2-4f51-b81a-921757186b6e
+
+
 
 Inspired by [Eidetic](https://github.com/hathibelagal-dev/Eidetic-Memory-Trainer). From the original app's description on F-Droid:
 
