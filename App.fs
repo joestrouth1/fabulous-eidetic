@@ -3,77 +3,147 @@ namespace FabulousAvaloniaBlank
 open Avalonia.Themes.Fluent
 open Fabulous
 open Fabulous.Avalonia
+open System
 
 open type Fabulous.Avalonia.View
 
+module Grid =
+    type CellState =
+        | Visible
+        | Obscured
+        | Hidden
+
+    type Cell =
+        Option<
+            {| value: int
+               label: string
+               state: CellState |}
+         >
+
+    type Grid = Cell list list
+    let Dimensions = {| rows = 6; columns = 3 |}
+    let ValueRange = [ 1..9 ]
+
+    let init () : Grid =
+        let random = Random()
+        let shuffledValues = ValueRange |> List.sortBy (fun _ -> random.Next())
+
+        let totalCells = Dimensions.rows * Dimensions.columns
+
+        let filledCells: List<Cell> =
+            shuffledValues
+            |> List.map (fun (value) ->
+                {| value = value
+                   label = sprintf "%d" value
+                   state = Visible |})
+            |> List.map Some
+
+        let emptyCells = List.init (totalCells - List.length shuffledValues) (fun _ -> None)
+        let allCells = filledCells @ emptyCells |> List.sortBy (fun _ -> random.Next())
+
+        allCells |> List.chunkBySize Dimensions.columns
+
 module App =
+    open Grid
+
+    type GameState =
+        | Start
+        | Running
+        | End
+
+    let GameStateDisplayNames: Map<GameState, string> =
+        [ (Start, "Game Start"); (Running, "Game Running"); (End, "Game Over") ]
+        |> Map.ofList
+
+
+
     type Model =
-        { Count: int; Step: int; TimerOn: bool }
+        { State: GameState
+          grid: Grid
+          message: string option }
+    // { Count: int; Step: int; TimerOn: bool }
 
     type Msg =
-        | Increment
-        | Decrement
-        | Reset
-        | SetStep of float
-        | TimerToggled of bool
-        | TimedTick
+        | SetState of GameState
+        | AdvanceState
+        | PressCell of int * int
 
-    let initModel = { Count = 0; Step = 1; TimerOn = false }
+    let initModel =
+        { State = Start
+          grid = Grid.init ()
+          message = None }
 
-    let timerCmd () =
-        async {
-            do! Async.Sleep 200
-            return TimedTick
-        }
-        |> Cmd.ofAsyncMsg
+    // let timerCmd () =
+    //     async {
+    //         do! Async.Sleep 200
+    //         return TimedTick
+    //     }
+    //     |> Cmd.ofAsyncMsg
 
     let init () = initModel, Cmd.none
 
     let update msg model =
         match msg with
-        | Increment ->
-            { model with
-                Count = model.Count + model.Step },
-            Cmd.none
-        | Decrement ->
-            { model with
-                Count = model.Count - model.Step },
-            Cmd.none
-        | Reset -> initModel, Cmd.none
-        | SetStep n -> { model with Step = int (n + 0.5) }, Cmd.none
-        | TimerToggled on -> { model with TimerOn = on }, (if on then timerCmd () else Cmd.none)
-        | TimedTick ->
-            if model.TimerOn then
+        | SetState state -> { model with State = state }, Cmd.none
+        | AdvanceState ->
+            match model.State with
+            | Start ->
                 { model with
-                    Count = model.Count + model.Step },
-                timerCmd ()
-            else
-                model, Cmd.none
+                    State = Running
+                    grid = Grid.init () },
+                Cmd.none
+            | Running -> { model with State = End }, Cmd.none
+            | End -> { model with State = Start }, Cmd.none
+        | PressCell(row, col) ->
+            let result =
+                match model.grid[row][col] with
+                | Some cell ->
+                    let newGrid =
+                        model.grid
+                        |> List.mapi (fun rowIndex gridRow ->
+                            if rowIndex <> row then
+                                gridRow
+                            else
+                                gridRow
+                                |> List.mapi (fun colIndex cellOption ->
+                                    match cellOption with
+                                    | Some c when colIndex = col -> Some {| c with state = Hidden |}
+                                    | other -> other))
+
+                    { model with
+                        grid = newGrid
+                        message = Some $"Pressed {cell.value}" }
+                | None -> { model with message = None }
+
+            result, Cmd.none
 
     let view model =
         (VStack 16.0 {
-            TextBlock($"%d{model.Count}").centerText ()
+            TextBlock($"%s{GameStateDisplayNames[model.State]}").centerText ()
+            Button("Advance", AdvanceState).centerHorizontal ()
 
-            Button("Increment", Increment).centerHorizontal ()
+            if model.State = Running then
+                let coldefs = List.init Grid.Dimensions.columns (fun _ -> Dimension.Star)
+                let rowdefs = List.init Grid.Dimensions.rows (fun _ -> Dimension.Star)
 
-            Button("Decrement", Decrement).centerHorizontal ()
+                match model.message with
+                | Some(msg) -> TextBlock(msg)
+                | _ -> ()
 
-            (HStack 16.0 {
-                TextBlock("Timer").centerVertical ()
+                (Grid(coldefs, rowdefs) {
+                    for row in 0 .. Grid.Dimensions.rows - 1 do
+                        for col in 0 .. Grid.Dimensions.columns - 1 do
+                            let cell = model.grid[row][col]
 
-                ToggleSwitch(model.TimerOn, TimerToggled)
-            })
-                .margin(20.)
-                .centerHorizontal ()
-
-            Slider(1., 10, float model.Step, SetStep)
-
-            TextBlock($"Step size: %d{model.Step}").centerText ()
-
-            Button("Reset", Reset).centerHorizontal ()
-
+                            match cell with
+                            | Some cell when cell.state = Visible ->
+                                Button(cell.label, PressCell(row, col)).gridRow(row).gridColumn (col)
+                            | _ -> Rectangle().gridRow(row).gridColumn (col)
+                })
+                    .horizontalAlignment (Avalonia.Layout.HorizontalAlignment.Stretch)
         })
-            .center ()
+            .centerVertical ()
+
 
 
 #if MOBILE
