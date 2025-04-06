@@ -11,8 +11,7 @@ For now, it's reproduces an issue where:
 - And the height of the VStack shrinks
 - And the dot of the 'i' in the top TextBlock is visible in multiple locations
 
-<video src="./idot-issue.mp4" autoplay controls >
-</video>
+![]("/idot-issue.mp4")
 
 Inspired by [Eidetic](https://github.com/hathibelagal-dev/Eidetic-Memory-Trainer). From the original app's description on F-Droid:
 
