@@ -48,11 +48,15 @@ module App =
 
     type GameState =
         | Start
-        | Running
+        | Learning
+        | Testing
         | End
 
     let GameStateDisplayNames: Map<GameState, string> =
-        [ (Start, "Game Start"); (Running, "Game Running"); (End, "Game Over") ]
+        [ (Start, "Game Start")
+          (Learning, "Learn")
+          (Testing, "Do your best!")
+          (End, "Game Over") ]
         |> Map.ofList
 
 
@@ -89,10 +93,27 @@ module App =
             match model.State with
             | Start ->
                 { model with
-                    State = Running
+                    State = Learning
                     grid = Grid.init () },
                 Cmd.none
-            | Running -> { model with State = End }, Cmd.none
+            | Learning ->
+                { model with
+                    State = Testing
+                    grid =
+                        model.grid
+                        |> List.map (fun row ->
+                            row
+                            |> List.map (fun cell ->
+                                match cell with
+                                | Some cell when cell.state = Visible ->
+                                    Some
+                                        {| label = cell.label
+                                           state = Obscured
+                                           value = cell.value |}
+                                | None -> None
+                                | _ -> cell)) },
+                Cmd.none
+            | Testing -> { model with State = End }, Cmd.none
             | End -> { model with State = Start }, Cmd.none
         | PressCell(row, col) ->
             let result =
@@ -103,46 +124,80 @@ module App =
                         |> List.mapi (fun rowIndex gridRow ->
                             if rowIndex <> row then
                                 gridRow
+                                |> List.map (fun cell ->
+                                    match cell with
+                                    | Some cell when cell.state = Hidden -> Some cell
+                                    | Some cell -> Some {| cell with state = Obscured |}
+                                    | None -> None)
                             else
                                 gridRow
                                 |> List.mapi (fun colIndex cellOption ->
                                     match cellOption with
                                     | Some c when colIndex = col -> Some {| c with state = Hidden |}
-                                    | other -> other))
+                                    | Some c when c.state = Visible -> Some {| c with state = Obscured |}
+                                    | c -> c))
 
                     { model with
                         grid = newGrid
+                        State = Testing
                         message = Some $"Pressed {cell.value}" }
                 | None -> { model with message = None }
 
             result, Cmd.none
 
     let view model =
-        (VStack 16.0 {
-            TextBlock($"%s{GameStateDisplayNames[model.State]}").centerText ()
-            Button("Advance", AdvanceState).centerHorizontal ()
+        SplitView(
+            (Rectangle()).fill(Avalonia.Media.Colors.PaleVioletRed).width(24.0).height (24.0),
+            (VStack 16.0 {
+                TextBlock($"%s{GameStateDisplayNames[model.State]}").centerText ()
+                Button("Advance", AdvanceState).centerHorizontal ()
 
-            if model.State = Running then
-                let coldefs = List.init Grid.Dimensions.columns (fun _ -> Dimension.Star)
-                let rowdefs = List.init Grid.Dimensions.rows (fun _ -> Dimension.Star)
+                match model.State with
+                | Learning
+                | Testing ->
+                    let coldefs = List.init Grid.Dimensions.columns (fun _ -> Dimension.Star)
+                    let rowdefs = List.init Grid.Dimensions.rows (fun _ -> Dimension.Star)
 
-                match model.message with
-                | Some(msg) -> TextBlock(msg)
-                | _ -> ()
+                    match model.message with
+                    | Some(msg) -> TextBlock(msg)
+                    | _ -> ()
 
-                (Grid(coldefs, rowdefs) {
-                    for row in 0 .. Grid.Dimensions.rows - 1 do
-                        for col in 0 .. Grid.Dimensions.columns - 1 do
-                            let cell = model.grid[row][col]
+                    (Grid(coldefs, rowdefs) {
+                        for row in 0 .. Grid.Dimensions.rows - 1 do
+                            for col in 0 .. Grid.Dimensions.columns - 1 do
+                                let cell = model.grid[row][col]
 
-                            match cell with
-                            | Some cell when cell.state = Visible ->
-                                Button(cell.label, PressCell(row, col)).gridRow(row).gridColumn (col)
-                            | _ -> Rectangle().gridRow(row).gridColumn (col)
-                })
-                    .horizontalAlignment (Avalonia.Layout.HorizontalAlignment.Stretch)
-        })
-            .centerVertical ()
+                                match cell with
+                                | Some cell when cell.state = Visible ->
+                                    Button(cell.label, PressCell(row, col))
+                                        .gridRow(row)
+                                        .gridColumn(col)
+                                        .padding(24.0, 32.0)
+                                        .horizontalContentAlignment(Avalonia.Layout.HorizontalAlignment.Center)
+                                        .horizontalAlignment(Avalonia.Layout.HorizontalAlignment.Stretch)
+                                        .verticalAlignment(Avalonia.Layout.VerticalAlignment.Stretch)
+                                        .fontSize (20.0)
+                                | Some cell when cell.state = Obscured ->
+                                    Button("?", PressCell(row, col))
+                                        .gridRow(row)
+                                        .gridColumn(col)
+                                        .padding(24.0, 32.0)
+                                        .horizontalContentAlignment(Avalonia.Layout.HorizontalAlignment.Center)
+                                        .horizontalAlignment(Avalonia.Layout.HorizontalAlignment.Stretch)
+                                        .verticalAlignment(Avalonia.Layout.VerticalAlignment.Stretch)
+                                        .fontSize (20.0)
+                                | _ -> Rectangle().gridRow(row).gridColumn (col)
+                    })
+                        .horizontalAlignment(Avalonia.Layout.HorizontalAlignment.Stretch)
+                        .verticalAlignment (Avalonia.Layout.VerticalAlignment.Stretch)
+                | Start -> Button("You ready?", AdvanceState)
+                | End -> Button("All Done!", AdvanceState)
+            })
+                .margin (48.0)
+        )
+            // .isPaneOpen(true)
+            .displayMode (Avalonia.Controls.SplitViewDisplayMode.CompactInline)
+
 
 
 
