@@ -75,13 +75,6 @@ module App =
           grid = Grid.init ()
           message = None }
 
-    // let timerCmd () =
-    //     async {
-    //         do! Async.Sleep 200
-    //         return TimedTick
-    //     }
-    //     |> Cmd.ofAsyncMsg
-
     let init () = initModel, Cmd.none
 
 
@@ -123,27 +116,24 @@ module App =
                     | Some c when colIndex = col -> Some { c with state = Hidden }
                     | c -> c)
             else
-                gridRow
-                |> List.map (fun cell ->
-                    Option.map
-                        (fun cell ->
-                            if cell.state = Hidden then
-                                cell
-                            else
-                                { cell with state = Obscured })
-                        cell))
+                gridRow)
 
-    let pressCell row col model =
+    let pressCell row col (model: Model) =
+        let nextAction =
+            if model.State = Learning then
+                Cmd.ofMsg AdvanceState
+            else
+                Cmd.none
+
         match model.grid[row][col] with
         | Some cell ->
             let newGrid = updateGridCell row col model.grid
 
             { model with
                 grid = newGrid
-                State = Testing
                 message = Some $"Pressed {cell.value}" },
-            Cmd.none
-        | None -> { model with message = None }, Cmd.none
+            nextAction
+        | None -> { model with message = None }, nextAction
 
     let update msg model =
         match msg with
